@@ -175,23 +175,47 @@ local function sides(ctx: Ctx, z0: number, z1: number, y: number?, skipBanks: bo
 	end
 end
 
-local function bottles(ctx: Ctx, z0: number, z1: number, y: number?, lift: number?)
-	local rng = ctx.rng
-	local lanes = { -7, 0, 7 }
-	local lane = lanes[rng:NextInteger(1, 3)]
-	local z = z0
-	while z <= z1 do
-		local id = ctx.nextBottleId()
-		local b = newPart(ctx.model, L(ctx, lane, (y or 0) + 1.8 + (lift or 0), z), Vector3.new(1.4, 2, 1.4), Palette.Juice, Enum.Material.Neon)
+local function pickup(ctx: Ctx, cf: CFrame, kind: string): Part
+	local id = ctx.nextBottleId()
+	local b
+	if kind == "Gem" then
+		-- Diamond: a cube stood on its corner, with a pale inner glint.
+		b = newPart(ctx.model, cf * CFrame.Angles(math.rad(45), 0, math.rad(45)), Vector3.new(1.6, 1.6, 1.6), Palette.Gem, Enum.Material.Glass)
+		b.Transparency = 0.15
+		b.Reflectance = 0.3
+		local core = newPart(b, cf, Vector3.new(0.7, 0.7, 0.7), Palette.GemGlint, Enum.Material.Neon)
+		core.CanCollide = false
+		core.CanQuery = false
+		core.CanTouch = false
+	else
+		b = newPart(ctx.model, cf * CFrame.Angles(0, 0, math.pi / 2), Vector3.new(2.2, 1.6, 1.6), Palette.Juice, Enum.Material.Neon)
 		b.Shape = Enum.PartType.Cylinder
-		b.CFrame = b.CFrame * CFrame.Angles(0, 0, math.pi / 2)
-		b.Size = Vector3.new(2, 1.4, 1.4)
-		b.CanCollide = false
-		b.CanTouch = false
-		b.Name = "Bottle"
-		b:SetAttribute("BottleId", id)
-		CollectionService:AddTag(b, "Bottle")
-		z += 5
+	end
+	b.CanCollide = false
+	b.CanTouch = false
+	b.Name = kind
+	b:SetAttribute("BottleId", id)
+	b:SetAttribute("Kind", kind)
+	CollectionService:AddTag(b, "Bottle")
+	return b
+end
+
+-- Juice: a short line of 3, only on some pieces (rarer, but each is worth more).
+-- Gems: sometimes one diamond, off to one side, so grabbing it is a small detour.
+-- `force` always places juice (e.g. arcs over hurdles that reward the jump).
+local function bottles(ctx: Ctx, z0: number, z1: number, y: number?, lift: number?, force: boolean?)
+	local rng = ctx.rng
+	local h = (y or 0) + 1.8 + (lift or 0)
+	if force or rng:NextNumber() < 0.5 then
+		local lane = ({ -5, 0, 5 })[rng:NextInteger(1, 3)]
+		local mid = (z0 + z1) / 2
+		for i = -1, 1 do
+			pickup(ctx, L(ctx, lane, h, mid + i * 5), "Juice")
+		end
+	end
+	if rng:NextNumber() < 0.3 then
+		local side = rng:NextNumber() < 0.5 and -1 or 1
+		pickup(ctx, L(ctx, side * rng:NextNumber(5, 9), (y or 0) + 2.2, rng:NextNumber(z0, z1)), "Gem")
 	end
 end
 
@@ -235,7 +259,7 @@ function Segments.hurdle(ctx: Ctx): Result
 	bar.CanCollide = false
 	CollectionService:AddTag(bar, "Hurdle")
 	-- Bottles arc over the hurdle: they reward the jump.
-	bottles(ctx, z - 5, z + 5, 0, 3)
+	bottles(ctx, z - 5, z + 5, 0, 3, true)
 	bottles(ctx, 44, 54)
 	return { length = len, exit = exitAt(ctx, len), turn = 0 }
 end

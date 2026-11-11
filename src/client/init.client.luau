@@ -21,6 +21,11 @@ end)
 Runner.onShield.Event:Connect(function()
 	Hud.flash("SHIELD!", Palette.Shield)
 end)
+Runner.onPickup.Event:Connect(function(kind: string)
+	if kind == "Gem" then
+		Hud.flash("+3 GEMS", Palette.Gem)
+	end
+end)
 remotes.Notify.OnClientEvent:Connect(function(text: string)
 	Hud.toast(text)
 end)

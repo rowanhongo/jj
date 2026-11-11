@@ -10,6 +10,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local ContextActionService = game:GetService("ContextActionService")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
@@ -20,6 +21,7 @@ local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Runner = {}
 Runner.onStumble = Instance.new("BindableEvent")
 Runner.onShield = Instance.new("BindableEvent")
+Runner.onPickup = Instance.new("BindableEvent")
 
 local controls: any = nil
 task.spawn(function()
@@ -144,8 +146,27 @@ local function step()
 	local t = os.clock()
 
 	-- Input
-	local mv = controls and controls:GetMoveVector() or Vector3.zero
-	local steer = math.clamp(mv.X, -1, 1)
+	-- Keyboard and gamepad are read directly (the control module's move vector stayed zero
+	-- in testing); touch falls back to the control module's thumbstick.
+	local steer = 0
+	if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
+		steer -= 1
+	end
+	if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+		steer += 1
+	end
+	if steer == 0 then
+		for _, io in UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1) do
+			if io.KeyCode == Enum.KeyCode.Thumbstick1 and math.abs(io.Position.X) > 0.15 then
+				steer = io.Position.X
+			end
+		end
+	end
+	if steer == 0 and controls then
+		local mv = controls:GetMoveVector()
+		steer = mv.X
+	end
+	steer = math.clamp(steer, -1, 1)
 	if math.abs(steer) > 0.45 then
 		local s = math.sign(steer)
 		if s ~= lastSteerSign or t - lastSteerTime > 0.05 then
@@ -218,6 +239,7 @@ local function step()
 				if id and not collected[id] then
 					collected[id] = true
 					part.LocalTransparencyModifier = 1
+					Runner.onPickup:Fire(part:GetAttribute("Kind") or "Juice")
 					remotes.Collect:FireServer(id)
 				end
 			end

@@ -29,7 +29,8 @@ return table.freeze({
 	JuiceMax = 100,
 	JuiceStart = 100,
 	JuiceDrainPerSecond = 5.5,
-	BottleJuice = 6,
+	BottleJuice = 12,
+	GemPickup = 3, -- gems per diamond on the path
 	BottlePickupRadius = 6,
 	EmptyStumbleEvery = 2.5,
 

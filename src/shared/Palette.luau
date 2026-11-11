@@ -39,6 +39,8 @@ return table.freeze({
 	GuardianEyes = hex("7CFF6B"),
 	Dart = hex("D94F2B"),
 	Shield = hex("5CD6FF"),
+	Gem = hex("8FF3FF"),
+	GemGlint = hex("E8FDFF"),
 
 	-- GUI
 	UiGold = hex("F5B83D"),

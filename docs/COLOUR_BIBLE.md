@@ -27,6 +27,8 @@ Code source of truth: `src/shared/Palette.luau`. Use only these colours for worl
 | GuardianEyes | `#7CFF6B` | Guardian eyes (neon) |
 | Dart | `#D94F2B` | blowdart |
 | Shield | `#5CD6FF` | shield bubble |
+| Gem | `#8FF3FF` | diamond gems (glass) |
+| GemGlint | `#E8FDFF` | diamond inner glint (neon) |
 | UiGold | `#F5B83D` | titles, highlights |
 | UiRim | `#6B3A12` | title outline, stroke |
 | UiPanel | `#1E3A24` | GUI panels |

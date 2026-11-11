@@ -213,7 +213,11 @@ local function setupRemotes()
 			return
 		end
 		run.collected[id] = true
-		run.juice = math.min(Config.JuiceMax, run.juice + Config.BottleJuice)
+		if bottle:GetAttribute("Kind") == "Gem" then
+			DataService.addGems(player, Config.GemPickup)
+		else
+			run.juice = math.min(Config.JuiceMax, run.juice + Config.BottleJuice)
+		end
 	end)
 
 	useShield.OnServerEvent:Connect(function(player)
