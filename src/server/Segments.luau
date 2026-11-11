@@ -373,6 +373,11 @@ end
 local function corner(ctx: Ctx, turn: number): Result
 	-- Square junction W x W. Entry from z = 0; the exit leaves through the `turn` side.
 	floor(ctx, 0, W)
+	for _, f in ctx.solid:GetChildren() do
+		if f:GetAttribute("Heading") then
+			f:SetAttribute("Corner", true) -- client skips its heading safety check here
+		end
+	end
 	local back = newPart(ctx.solid, L(ctx, 0, Config.WallHeight / 2 + 1, W + 1), Vector3.new(W + 4, Config.WallHeight + 6, 2), Palette.StoneLight, Enum.Material.Slate)
 	back:SetAttribute("Turn", turn)
 	CollectionService:AddTag(back, "TurnWall")
