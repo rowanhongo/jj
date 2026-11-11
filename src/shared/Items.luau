@@ -33,18 +33,20 @@ Items.SlotCount = 2
 
 -- Roll prices in gems. Pity: guaranteed rarity at least every N rolls.
 Items.RollPrice = 100
-Items.Roll10Price = 650 -- save 35%
+Items.Roll10Price = 800 -- 10 rolls for the price of 8
 Items.Pity = { Rare = 10, Epic = 25, Mythic = 80 }
 
-export type Cosmetic = { id: string, name: string, kind: "Title" | "Emote" | "Trail", rarity: Rarity, price: number, emote: string?, colour: string? }
+-- Titles are never sold: each one unlocks from an achievement (unlock.kind = level | best | rolls).
+export type Cosmetic = { id: string, name: string, kind: "Title" | "Emote" | "Trail", rarity: Rarity, price: number, emote: string?, colour: string?, unlock: { kind: string, n: number, text: string }? }
 
 Items.Cosmetics = {
 	{ id = "T_Rookie", name = "Rookie", kind = "Title", rarity = "Common", price = 0 },
-	{ id = "T_Vine", name = "Vine Swinger", kind = "Title", rarity = "Common", price = 150 },
-	{ id = "T_Junkie", name = "Juice Junkie", kind = "Title", rarity = "Uncommon", price = 250 },
-	{ id = "T_Bait", name = "Guardian Bait", kind = "Title", rarity = "Rare", price = 400 },
-	{ id = "T_Raider", name = "Temple Raider", kind = "Title", rarity = "Epic", price = 700 },
-	{ id = "T_Untouch", name = "Untouchable", kind = "Title", rarity = "Mythic", price = 1500 },
+	{ id = "T_Vine", name = "Vine Swinger", kind = "Title", rarity = "Common", price = 0, unlock = { kind = "best", n = 250, text = "Run 250 m" } },
+	{ id = "T_Junkie", name = "Juice Junkie", kind = "Title", rarity = "Uncommon", price = 0, unlock = { kind = "level", n = 5, text = "Reach level 5" } },
+	{ id = "T_Gambler", name = "High Roller", kind = "Title", rarity = "Rare", price = 0, unlock = { kind = "rolls", n = 50, text = "Roll 50 times" } },
+	{ id = "T_Bait", name = "Guardian Bait", kind = "Title", rarity = "Rare", price = 0, unlock = { kind = "best", n = 1000, text = "Run 1,000 m" } },
+	{ id = "T_Raider", name = "Temple Raider", kind = "Title", rarity = "Epic", price = 0, unlock = { kind = "level", n = 20, text = "Reach level 20" } },
+	{ id = "T_Untouch", name = "Untouchable", kind = "Title", rarity = "Mythic", price = 0, unlock = { kind = "best", n = 3000, text = "Run 3,000 m" } },
 	{ id = "E_Wave", name = "Wave", kind = "Emote", rarity = "Common", price = 0, emote = "wave" },
 	{ id = "E_Cheer", name = "Cheer", kind = "Emote", rarity = "Common", price = 150, emote = "cheer" },
 	{ id = "E_Point", name = "Point", kind = "Emote", rarity = "Common", price = 150, emote = "point" },

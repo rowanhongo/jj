@@ -50,3 +50,6 @@ Code source of truth: `src/shared/Palette.luau`. Use only these colours for worl
 - Green-tinted ambient light, so shadows read as jungle green, not grey.
 - Atmosphere: haze 1.7 and density 0.34, coloured pale mint. Far cliffs fade into green mist.
 - Colour correction: saturation +0.25. Bloom stays low. A light touch of sun rays.
+
+| Tar | 2B2118 | tar pit surface (slows runners) |
+| TarBubble | 4A3A2A | bubbles on the tar |

@@ -45,6 +45,7 @@ return table.freeze({
 	IntermissionSeconds = 12,
 	CountdownSeconds = 3,
 	MinPlayers = 1,
+	Bots = 7, -- bot runners that join every run, wearing the first runner's avatar
 
 	-- Rewards
 	GemsPerMetre = 1 / 25,

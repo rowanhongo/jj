@@ -24,6 +24,7 @@ local Palette = require(Shared.Palette)
 local PathService = require(script.Parent.PathService)
 local DataService = require(script.Parent.DataService)
 local ShopService = require(script.Parent.ShopService)
+local BotService = require(script.Parent.BotService)
 local Items = require(Shared.Items)
 
 local RoundService = {}
@@ -188,14 +189,13 @@ local function catch(player: Player, reason: string)
 	end
 end
 
-local function dropTrap(player: Player, width: number, height: number, color: Color3)
-	local root = rootOf(player)
+local function dropTrapAt(rootCF: CFrame, owner: number, width: number, height: number, color: Color3)
 	local path = workspace:FindFirstChild("Path")
-	if not root or not path then
+	if not path then
 		return
 	end
-	local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
-	local at = root.Position - look * 10
+	local look = Vector3.new(rootCF.LookVector.X, 0, rootCF.LookVector.Z).Unit
+	local at = rootCF.Position - look * 10
 	local rp = RaycastParams.new()
 	rp.FilterType = Enum.RaycastFilterType.Include
 	rp.FilterDescendantsInstances = { path }
@@ -211,10 +211,39 @@ local function dropTrap(player: Player, width: number, height: number, color: Co
 	trap.CFrame = CFrame.lookAt(hit.Position, hit.Position + look) * CFrame.new(0, height / 2, 0)
 	trap.Color = color
 	trap.Material = Enum.Material.Grass
-	trap:SetAttribute("Owner", player.UserId)
+	trap:SetAttribute("Owner", owner)
 	CollectionService:AddTag(trap, "Hurdle")
 	trap.Parent = path
 end
+
+local function dropTrap(player: Player, width: number, height: number, color: Color3)
+	local root = rootOf(player)
+	if root then
+		dropTrapAt(root.CFrame, player.UserId, width, height, color)
+	end
+end
+
+local botHooks: BotService.Hooks = {
+	warDrum = function(name)
+		local t = now()
+		for other, _ in runs do
+			if other:GetAttribute("State") == "Running" then
+				other:SetAttribute("SlowUntil", t + 2)
+				notify(other, name .. " beat the War Drum!")
+			end
+		end
+	end,
+	trap = function(cf, w, h, color)
+		dropTrapAt(cf, 0, w, h, color)
+	end,
+	gone = function(name, reason, m)
+		for other, _ in runs do
+			if other.Parent then
+				notify(other, string.format("%s: %s at %d m", name, reason == "Fell" and "fell" or "caught", m))
+			end
+		end
+	end,
+}
 
 useGadgetEffect = function(player: Player, run: Run, id: string)
 	local t = now()
@@ -243,6 +272,7 @@ useGadgetEffect = function(player: Player, run: Run, id: string)
 				notify(other, player.DisplayName .. " beat the War Drum!")
 			end
 		end
+		BotService.slowAll(t + 2)
 	elseif id == "GrappleVine" then
 		player:SetAttribute("FlyUntil", t + 1.6)
 		player:SetAttribute("LeapAt", t)
@@ -403,8 +433,23 @@ local function playRound()
 	print(string.format("[JJ.Round] start seed=%d runners=%d", seed, #list))
 
 	local startCF = PathService.startCFrame()
+	local total = #list + Config.Bots
+	local function lateralOf(i: number): number
+		return (total == 1) and 0 or (-10 + 20 * (i - 1) / (total - 1))
+	end
+	-- Players are spread through the line-up, bots fill the gaps.
+	local slots = {}
+	for i = 1, total do
+		table.insert(slots, i)
+	end
+	local botCFs = {}
+	for _ = 1, Config.Bots do
+		local i = table.remove(slots, math.random(1, #slots)) :: number
+		table.insert(botCFs, startCF * CFrame.new(lateralOf(i), 0, math.random(0, 3)))
+	end
+	BotService.spawn(list[1], botCFs)
 	for i, player in list do
-		local lateral = (#list == 1) and 0 or (-9 + 18 * (i - 1) / (#list - 1))
+		local lateral = lateralOf(slots[i])
 		runs[player] = { dist = -10, juice = Config.JuiceStart, emptySince = 0, collected = {}, camps = 0, slots = {}, honeyUntil = 0 }
 		player:SetAttribute("State", "Countdown")
 		player:SetAttribute("RunSpeed", Config.RunSpeedStart)
@@ -494,9 +539,12 @@ local function playRound()
 			end
 			workspace:SetAttribute("PaceDist", paceDist)
 		end
-		if #alive ~= lastAliveCount then
-			lastAliveCount = #alive
-			workspace:SetAttribute("Alive", #alive)
+		BotService.step(dt, runSpeed, paceDist, botHooks)
+		leader = math.max(leader, BotService.maxDist())
+		local aliveN = #alive + BotService.aliveCount()
+		if aliveN ~= lastAliveCount then
+			lastAliveCount = aliveN
+			workspace:SetAttribute("Alive", aliveN)
 		end
 
 		PathService.ensureAhead(leader)
@@ -514,13 +562,20 @@ local function playRound()
 	local order = {}
 	for player, run in runs do
 		if player.Parent then
-			table.insert(order, { player = player, run = run })
+			table.insert(order, { player = player, name = player.DisplayName, dist = run.dist })
 		end
 	end
+	for _, r in BotService.results() do
+		table.insert(order, { player = nil, name = r.name, dist = r.dist })
+	end
 	table.sort(order, function(a, b)
-		return a.run.dist > b.run.dist
+		return a.dist > b.dist
 	end)
 	for i, e in order do
+		if not e.player then
+			continue
+		end
+		e.run = runs[e.player]
 		local m = metres(e.run.dist)
 		local gems = math.floor(m * Config.GemsPerMetre)
 		if i == 1 and #order > 1 then
@@ -530,12 +585,12 @@ local function playRound()
 		DataService.addGems(e.player, gems)
 		DataService.addXp(e.player, xp)
 		DataService.submitDistance(e.player, m, "Stampede")
-		notify(e.player, string.format("#%d  %d m  +%d gems  +%d XP", i, m, gems, xp))
+		notify(e.player, string.format("#%d of %d  %d m  +%d gems  +%d XP", i, #order, m, gems, xp))
 		task.spawn(DataService.save, e.player)
 	end
 	local top = order[1]
 	if top then
-		status(string.format("%s ran furthest: %d m", top.player.DisplayName, metres(top.run.dist)))
+		status(string.format("%s ran furthest: %d m", top.name, metres(top.dist)))
 	end
 	workspace:SetAttribute("Alive", 0)
 	task.wait(5)
@@ -545,6 +600,7 @@ local function playRound()
 		end
 	end
 	runs = {}
+	BotService.clear()
 	guardian:PivotTo(CFrame.new(0, -100, 0))
 end
 

@@ -51,6 +51,30 @@ local baseHip: number? = nil
 local wasRunning = false
 local lastLeap = 0
 local flyY: number? = nil
+local tarUntil = 0
+local lastClock = os.clock()
+
+-- Zipline ride (see Segments.zipline). Cables are parallel; lane 1 is leftmost.
+local ZIP_HANG = 4.6
+local ZIP_SWITCH = 0.28
+type Zip = { cables: { BasePart }, lane: number, s: number, from: number?, swStart: number, held: boolean }
+local zip: Zip? = nil
+
+local function cableAB(c: BasePart): (Vector3, Vector3)
+	return c:GetAttribute("A") :: Vector3, c:GetAttribute("B") :: Vector3
+end
+
+local function zipPos(c: BasePart, s: number): Vector3
+	local a, b = cableAB(c)
+	return a + (b - a).Unit * s
+end
+
+local function endZip(hum: Humanoid?)
+	zip = nil
+	if hum then
+		hum.PlatformStand = false
+	end
+end
 
 local params = OverlapParams.new()
 params.FilterType = Enum.RaycastFilterType.Include
@@ -199,6 +223,85 @@ local function resetRun()
 	usedJunctions, hitObstacles, collected = {}, {}, {}
 	headingMismatchSince = 0
 	turning = nil
+	tarUntil = 0
+	local c = player.Character
+	endZip(c and c:FindFirstChildOfClass("Humanoid"))
+end
+
+local function grabZip(trigger: Instance, root: BasePart, hum: Humanoid)
+	local folder = trigger.Parent and trigger.Parent:FindFirstChild("Zips")
+	if not folder then
+		return
+	end
+	local cables: { BasePart } = {}
+	for _, c in folder:GetChildren() do
+		if c:IsA("BasePart") and c:GetAttribute("Lane") then
+			cables[c:GetAttribute("Lane") :: number] = c
+		end
+	end
+	if #cables == 0 then
+		return
+	end
+	local right = rightOf(heading)
+	local best, bestD = 1, math.huge
+	for lane, c in cables do
+		local a = cableAB(c)
+		local d = math.abs((root.Position - a):Dot(right))
+		if d < bestD then
+			best, bestD = lane, d
+		end
+	end
+	local a, b = cableAB(cables[best])
+	local s = math.max(0, (root.Position - a):Dot((b - a).Unit))
+	zip = { cables = cables, lane = best, s = s, from = nil, swStart = 0, held = true }
+	hum.PlatformStand = true
+end
+
+-- One frame on the zipline: slide up the cable, hop lanes on a left/right press, drop at a cut.
+local function zipFrame(root: BasePart, hum: Humanoid, speed: number, steer: number, dt: number)
+	local z = zip :: Zip
+	local t = os.clock()
+	local pressed = math.abs(steer) > 0.5
+	if pressed and not z.held and not z.from then
+		local target = z.lane + math.sign(steer)
+		if z.cables[target] then
+			z.from = z.lane
+			z.lane = target
+			z.swStart = t
+		end
+	end
+	z.held = pressed
+	local cable = z.cables[z.lane]
+	local a, b = cableAB(cable)
+	local len = (b - a).Magnitude
+	local dir = (b - a).Unit
+	z.s += speed * dt
+	local p = zipPos(cable, z.s)
+	if z.from then
+		local u = math.min((t - z.swStart) / ZIP_SWITCH, 1)
+		local e = easeOutCubic(u)
+		p = zipPos(z.cables[z.from], z.s):Lerp(p, e) + Vector3.new(0, 2.2 * math.sin(math.pi * u), 0)
+		if u >= 1 then
+			z.from = nil
+		end
+	end
+	local cut = cable:GetAttribute("Cut") :: number
+	if not z.from and cut < 1 and z.s >= len * cut then
+		-- The line snapped: let go and fall.
+		endZip(hum)
+		root.AssemblyLinearVelocity = dir * speed * 0.5 + Vector3.new(0, -4, 0)
+		Runner.onStumble:Fire("The line snapped!")
+		return
+	end
+	if z.s >= len then
+		endZip(hum)
+		root.CFrame = CFrame.lookAt(p, p + heading) * CFrame.new(0, -ZIP_HANG + 3, -2)
+		root.AssemblyLinearVelocity = heading * speed + Vector3.new(0, 10, 0)
+		return
+	end
+	local at = p - Vector3.new(0, ZIP_HANG, 0)
+	root.CFrame = CFrame.lookAt(at, at + heading)
+	root.AssemblyLinearVelocity = dir * speed
 end
 
 local function step()
@@ -223,6 +326,8 @@ local function step()
 		return
 	end
 	local t = os.clock()
+	local dt = math.min(t - lastClock, 0.1)
+	lastClock = t
 
 	if turning then
 		local speed = player:GetAttribute("RunSpeed") or Config.RunSpeedStart
@@ -274,6 +379,13 @@ local function step()
 	local st = workspace:GetServerTimeNow()
 	if st < (player:GetAttribute("SpeedUntil") or 0) then
 		speed *= 1.35
+	end
+	if t < tarUntil then
+		speed *= 0.45
+	end
+	if zip then
+		zipFrame(root, hum, speed * 1.05, steer, dt)
+		return
 	end
 
 	-- Gadgets: Grapple Vine launches you forward; while flying you never drop below where you took off.
@@ -330,6 +442,18 @@ local function step()
 				if not hitObstacles[part] and part:GetAttribute("Owner") ~= player.UserId then
 					hitObstacles[part] = true
 					Runner.stumble("Tripped")
+				end
+			elseif CollectionService:HasTag(part, "Block") then
+				if not hitObstacles[part] then
+					hitObstacles[part] = true
+					Runner.stumble("Hit a wall")
+				end
+			elseif CollectionService:HasTag(part, "Tar") then
+				tarUntil = t + 0.15
+			elseif CollectionService:HasTag(part, "ZipStart") then
+				if not zip and not usedJunctions[part] then
+					usedJunctions[part] = true
+					grabZip(part, root, hum)
 				end
 			elseif CollectionService:HasTag(part, "Duck") then
 				if not hitObstacles[part] then

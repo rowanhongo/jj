@@ -263,7 +263,7 @@ local function showResult(ids: { string })
 	button(right, string.format("1 more roll  💎%d", Items.RollPrice), Palette.UiBuy, Palette.UiInk, UDim2.fromOffset(250, 56), UDim2.fromOffset(0, 210), function()
 		again(1)
 	end)
-	button(right, string.format("10 more  💎%d", Items.Roll10Price), Palette.UiBuy, Palette.UiInk, UDim2.fromOffset(250, 56), UDim2.fromOffset(268, 210), function()
+	button(right, string.format("10 more rolls  💎%d", Items.Roll10Price), Palette.UiBuy, Palette.UiInk, UDim2.fromOffset(250, 56), UDim2.fromOffset(268, 210), function()
 		again(10)
 	end)
 	local done = button(c, "Done", Palette.UiInk, Palette.UiText, UDim2.fromOffset(200, 56), UDim2.new(0.5, -100, 0, 330), function()
@@ -394,7 +394,7 @@ local function drawShop(tab: string, f: Frame)
 		stroke(side, Palette.UiInk, 2)
 		new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), PaddingTop = UDim.new(0, 12) }, side)
 		text(side, "10 Rolls", 26, Palette.UiInk, TITLE, { Size = UDim2.new(1, 0, 0, 30), TextXAlignment = Enum.TextXAlignment.Left })
-		text(side, "Save 35%", 15, Palette.StoneShadow, BODY, { Size = UDim2.new(1, 0, 0, 30), TextXAlignment = Enum.TextXAlignment.Right })
+		text(side, string.format("10 for the price of %d", Items.Roll10Price // Items.RollPrice), 15, Palette.StoneShadow, BODY, { Size = UDim2.new(1, 0, 0, 30), TextXAlignment = Enum.TextXAlignment.Right })
 		local y = 40
 		for _, r in { "Rare", "Epic", "Mythic" } do
 			local left = Items.Pity[r] - (profile and profile.pity[r] or 0)
@@ -405,7 +405,7 @@ local function drawShop(tab: string, f: Frame)
 			corner(fill, 4)
 			y += 38
 		end
-		local r10 = button(side, "💎 " .. Items.Roll10Price, Palette.UiBuy, Palette.UiInk, UDim2.new(1, 0, 0, 52), UDim2.fromOffset(0, y + 4), function()
+		local r10 = button(side, "10 Rolls   💎 " .. Items.Roll10Price, Palette.UiBuy, Palette.UiInk, UDim2.new(1, 0, 0, 52), UDim2.fromOffset(0, y + 4), function()
 			Lobby.roll(10)
 		end)
 		r10.Name = "Roll10"
@@ -462,7 +462,7 @@ local function cosmeticTab(kind: string, f: Frame)
 		if c.kind == kind then
 			local own = profile and profile.cosmetics[c.id]
 			local icon = kind == "Title" and "🏷️" or kind == "Emote" and "💃" or "✨"
-			local badge = equipped == c.id and "Equipped" or (not own and "🛒 In daily shop" or nil)
+			local badge = equipped == c.id and "Equipped" or (not own and (c.unlock and ("🔒 " .. c.unlock.text) or "🛒 In daily shop") or nil)
 			local k = card(g, icon, c.name, c.rarity, c.rarity, badge, not own)
 			if own then
 				local b = new("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1) }, k)

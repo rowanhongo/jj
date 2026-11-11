@@ -321,6 +321,8 @@ function Segments.gap(ctx: Ctx): Result
 		local e = newPart(ctx.solid, L(ctx, 0, -1.2, z), Vector3.new(W - 0.4, 3.2, 1.2), Palette.StoneShadow, Enum.Material.Slate)
 		e.CanQuery = false
 	end
+	ctx.model:SetAttribute("GapA", a)
+	ctx.model:SetAttribute("GapB", a + g)
 	bottles(ctx, a - 2, a + g + 2, 0, 4)
 	return { length = len, exit = exitAt(ctx, len), turn = 0 }
 end
@@ -395,6 +397,168 @@ function Segments.stairsDown(ctx: Ctx): Result
 	return stairs(ctx, -8)
 end
 
+-- Half wall: a stone block across half the path. Running into it stops you and stumbles you.
+-- Later on a second block on the other side makes a slalom.
+function Segments.halfWall(ctx: Ctx): Result
+	local len = 60
+	straightBase(ctx, len)
+	local rng = ctx.rng
+	local side = rng:NextNumber() < 0.5 and -1 or 1
+	local zs = { 22 }
+	if rng:NextNumber() < 0.35 + 0.5 * ctx.difficulty then
+		table.insert(zs, 44)
+	end
+	for i, z in zs do
+		local s = (i == 1) and side or -side
+		local b = newPart(ctx.solid, L(ctx, s * W / 4, 4, z), Vector3.new(W / 2, 8, 3), Palette.StoneLight, Enum.Material.Slate)
+		b.Name = "HalfWall"
+		b:SetAttribute("Side", s)
+		CollectionService:AddTag(b, "Block")
+		ctx.model:SetAttribute("Wall" .. i .. "Z", z)
+		ctx.model:SetAttribute("Wall" .. i .. "Side", s)
+		local cap = newPart(ctx.solid, L(ctx, s * W / 4, 8.4, z), Vector3.new(W / 2 + 0.6, 0.8, 3.6), Palette.StoneMoss, Enum.Material.Grass)
+		cap.CanQuery = false
+		bottles(ctx, z + 4, z + 10, 0, 0, true)
+	end
+	return { length = len, exit = exitAt(ctx, len), turn = 0 }
+end
+
+-- Tar pit: sticky black pool over most of the width. Wading through halves your speed;
+-- jump over the narrow end or steer round the dry strip.
+function Segments.tar(ctx: Ctx): Result
+	local len = 60
+	straightBase(ctx, len)
+	local rng = ctx.rng
+	local side = rng:NextNumber() < 0.5 and -1 or 1
+	local pw = W - 7
+	local z0, z1 = 18, 40
+	local px = side * (W - pw) / 2 -- dry strip on the other side
+	local pit = newPart(ctx.model, L(ctx, px, 0, (z0 + z1) / 2), Vector3.new(pw, 1, z1 - z0), Palette.Tar, Enum.Material.SmoothPlastic)
+	pit.Reflectance = 0
+	-- Glowing danger rim round the pit so it reads from far down the path.
+	local rimH, rimT = 0.7, 0.8
+	for _, e in {
+		{ px, z0, pw + rimT * 2, rimT },
+		{ px, z1, pw + rimT * 2, rimT },
+		{ px - pw / 2, (z0 + z1) / 2, rimT, z1 - z0 },
+		{ px + pw / 2, (z0 + z1) / 2, rimT, z1 - z0 },
+	} do
+		local rim = newPart(ctx.model, L(ctx, e[1], rimH / 2 - 0.05, e[2]), Vector3.new(e[3], rimH, e[4]), Palette.UiDanger, Enum.Material.Neon)
+		rim.CanCollide = false
+		rim.CanQuery = false
+	end
+	-- Warning banner hung across the path ahead of the pit.
+	local banner = newPart(ctx.model, L(ctx, 0, 11, z0 - 8), Vector3.new(W - 2, 3, 0.4), Palette.UiDanger, Enum.Material.SmoothPlastic)
+	banner.CanCollide = false
+	banner.CanQuery = false
+	for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+		local sg = Instance.new("SurfaceGui")
+		sg.Face = face
+		sg.PixelsPerStud = 30
+		sg.LightInfluence = 0
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.fromScale(1, 1)
+		t.BackgroundTransparency = 1
+		t.Text = "TAR PIT"
+		t.Font = Enum.Font.FredokaOne
+		t.TextScaled = true
+		t.TextColor3 = Palette.UiText
+		local st = Instance.new("UIStroke")
+		st.Color = Palette.UiRim
+		st.Thickness = 3
+		st.Parent = t
+		t.Parent = sg
+		sg.Parent = banner
+	end
+	for _, sx in { -1, 1 } do
+		newPart(ctx.model, L(ctx, sx * (HALF - 1), 6, z0 - 8), Vector3.new(0.6, 12, 0.6), Palette.Trunk, Enum.Material.Wood).CanCollide = false
+	end
+	pit.CanCollide = false
+	pit.Name = "TarPit"
+	ctx.model:SetAttribute("TarSide", side)
+	CollectionService:AddTag(pit, "Tar")
+	for _ = 1, 7 do
+		local r = rng:NextNumber(1, 2.4)
+		local bub = newPart(ctx.model, L(ctx, px + rng:NextNumber(-pw / 2 + 2, pw / 2 - 2), 0.45, rng:NextNumber(z0 + 2, z1 - 2)), Vector3.new(r, r * 0.6, r), Palette.TarBubble, Enum.Material.SmoothPlastic)
+		bub.Shape = Enum.PartType.Ball
+		bub.CanCollide = false
+		bub.CanQuery = false
+	end
+	bottles(ctx, 44, 54)
+	return { length = len, exit = exitAt(ctx, len), turn = 0 }
+end
+
+-- Ziplines: four cables climb from a ledge across a chasm to a higher ledge. You grab the
+-- cable in your lane automatically. Two of them are cut part-way: press left/right to hop
+-- to the next cable before you reach the cut, or you drop into the water.
+-- Each cable is tagged Zipline with world-space A (start), B (end), Cut (0..1 of the way
+-- along where it snaps, 1 = whole) and Lane (1..4 left to right).
+Segments.ZipLanes = { -9, -3, 3, 9 }
+Segments.ZipHang = 4.6 -- root hangs this far under the cable
+function Segments.zipline(ctx: Ctx): Result
+	local rng = ctx.rng
+	local rise, span, ledge = 16, 80, 14
+	local len = ledge + span + ledge
+	local cableY = 10
+	floor(ctx, 0, ledge)
+	floor(ctx, ledge + span, len, rise)
+	for _, s in { -1, 1 } do
+		wall(ctx, s, 0, ledge)
+		wall(ctx, s, ledge + span, len, rise)
+	end
+	sides(ctx, 0, ledge)
+	sides(ctx, ledge, ledge + span, 0, true)
+	sides(ctx, ledge + span, len, rise)
+	-- Two different cables are cut, at different points.
+	local lanes = { 1, 2, 3, 4 }
+	local cutA = table.remove(lanes, rng:NextInteger(1, 4)) :: number
+	local cutB = table.remove(lanes, rng:NextInteger(1, 3)) :: number
+	local cuts = { [cutA] = rng:NextNumber(0.35, 0.5), [cutB] = rng:NextNumber(0.6, 0.78) }
+	local zips = Instance.new("Folder")
+	zips.Name = "Zips"
+	zips.Parent = ctx.model
+	local zA, zB = ledge - 2, ledge + span + 2
+	for lane, x in Segments.ZipLanes do
+		local a = L(ctx, x, cableY, zA).Position
+		local b = L(ctx, x, cableY + rise, zB).Position
+		local cut = cuts[lane] or 1
+		local e = a:Lerp(b, cut)
+		local c = newPart(zips, CFrame.lookAt((a + e) / 2, e) * CFrame.Angles(0, math.pi / 2, 0), Vector3.new((e - a).Magnitude, 0.45, 0.45), Palette.Rope, Enum.Material.Fabric)
+		c.Shape = Enum.PartType.Cylinder
+		c.CanCollide = false
+		c.Name = "Zip" .. lane
+		c:SetAttribute("A", a)
+		c:SetAttribute("B", b)
+		c:SetAttribute("Cut", cut)
+		c:SetAttribute("Lane", lane)
+		CollectionService:AddTag(c, "Zipline")
+		if cut < 1 then
+			-- Frayed end: a short drooping strand and a red rag so the cut reads from far off.
+			local droop = newPart(zips, CFrame.new(e) * CFrame.new(0, -1.4, 0), Vector3.new(0.3, 2.8, 0.3), Palette.Rope, Enum.Material.Fabric)
+			droop.CanCollide = false
+			droop.CanQuery = false
+			local rag = newPart(zips, CFrame.new(e) * CFrame.new(0, -0.6, 0), Vector3.new(1.4, 1.4, 0.2), Palette.UiDanger, Enum.Material.Neon)
+			rag.CanCollide = false
+			rag.CanQuery = false
+		end
+	end
+	-- Posts at both ends
+	for _, z in { zA, zB } do
+		local y = z == zA and 0 or rise
+		for _, s in { -1, 1 } do
+			newPart(ctx.solid, L(ctx, s * (HALF - 0.5), y + 6, z), Vector3.new(2, 12, 2), Palette.Trunk, Enum.Material.Wood).CanQuery = false
+		end
+		newPart(ctx.solid, L(ctx, 0, y + cableY + 0.9, z), Vector3.new(W, 1.2, 1.2), Palette.Trunk, Enum.Material.Wood).CanQuery = false
+	end
+	-- Grab trigger at the ledge end.
+	local grab = newPart(ctx.model, L(ctx, 0, 4, ledge - 4), Vector3.new(W, 10, 3), Palette.UiGold, Enum.Material.SmoothPlastic)
+	grab.Transparency = 1
+	grab.CanCollide = false
+	grab.Name = "ZipStart"
+	CollectionService:AddTag(grab, "ZipStart")
+	return { length = len, exit = exitAt(ctx, len, rise), turn = 0 }
+end
+
 local function corner(ctx: Ctx, turn: number): Result
 	-- Square junction W x W. Entry from z = 0; the exit leaves through the `turn` side.
 	floor(ctx, 0, W)
@@ -446,6 +610,8 @@ function Segments.footprint(kind: string): (number, number)
 		return 48, 8
 	elseif kind == "bridge" then
 		return 56, 8
+	elseif kind == "zipline" then
+		return 108, 8
 	end
 	return 60, 8
 end

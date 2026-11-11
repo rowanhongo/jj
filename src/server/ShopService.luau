@@ -28,7 +28,7 @@ function ShopService.daily(): ({ string }, number)
 	local r = Random.new(day * 7919)
 	local pool = {}
 	for _, c in Items.Cosmetics do
-		if c.price > 0 then
+		if c.price > 0 and c.kind ~= "Title" then
 			table.insert(pool, c.id)
 		end
 	end
@@ -99,6 +99,7 @@ handlers.Roll = function(player, p, n)
 	for _ = 1, count do
 		table.insert(out, rollOne(p))
 	end
+	DataService.checkTitles(player)
 	print(string.format("[JJ.Shop] %s rolled %d: %s", player.Name, count, table.concat(out, ",")))
 	return out
 end

@@ -38,6 +38,8 @@ return table.freeze({
 	Guardian = hex("5C6B4A"),
 	GuardianEyes = hex("7CFF6B"),
 	Dart = hex("D94F2B"),
+	Tar = hex("2B2118"), -- tar pit surface
+	TarBubble = hex("4A3A2A"),
 	Shield = hex("5CD6FF"),
 	Gem = hex("8FF3FF"),
 	GemGlint = hex("E8FDFF"),

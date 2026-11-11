@@ -71,6 +71,9 @@ local function pickKind(): string
 		duck = 1.4 + 1.0 * d,
 		gap = 0.9 + 1.3 * d,
 		bridge = 0.7,
+		halfWall = 1.1 + 0.8 * d,
+		tar = 0.8 + 0.6 * d,
+		zipline = (elevation < 24 and n > 4) and 0.6 or 0,
 		stairsUp = elevation < 24 and 0.7 or 0,
 		stairsDown = elevation > -8 and 0.7 or 0,
 	}
@@ -85,8 +88,8 @@ local function pickKind(): string
 	end
 	-- Never two hard obstacles in a row early on
 	local last = segments[n].kind
-	if d < 0.4 and (last == "gap" or last == "hurdle" or last == "duck") then
-		weights.gap, weights.hurdle, weights.duck = 0, 0, 0
+	if d < 0.4 and (last == "gap" or last == "hurdle" or last == "duck" or last == "halfWall" or last == "tar" or last == "zipline") then
+		weights.gap, weights.hurdle, weights.duck, weights.halfWall, weights.tar, weights.zipline = 0, 0, 0, 0, 0, 0
 	end
 	local total = 0
 	for _, w in weights do
@@ -170,6 +173,8 @@ local function build(kind: string, entry: CFrame)
 		elevation += 8
 	elseif kind == "stairsDown" then
 		elevation -= 8
+	elseif kind == "zipline" then
+		elevation += 16
 	end
 end
 
@@ -260,6 +265,17 @@ end
 
 function PathService.floorY(seg: Segment): number
 	return math.min(seg.entry.Y, seg.exit.Y)
+end
+
+PathService.segmentAt = segmentAt
+
+-- Every built piece's Solid folder (floors, walls, blocks).
+function PathService.solids(): { Instance }
+	local t = {}
+	for _, s in segments do
+		table.insert(t, s.solid)
+	end
+	return t
 end
 
 function PathService.builtDist(): number

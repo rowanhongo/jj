@@ -74,7 +74,22 @@ function DataService.setPusher(fn: (Player, Profile) -> ())
 	pusher = fn
 end
 
+-- Titles are earned, never bought: grant any whose achievement is met.
+local function grantTitles(player: Player, p: Profile)
+	for _, c in Items.Cosmetics do
+		local u = c.unlock
+		if u and not p.cosmetics[c.id] then
+			local have = u.kind == "level" and p.level or u.kind == "rolls" and p.rolls or p.best
+			if have >= u.n then
+				p.cosmetics[c.id] = true
+				notify(player, "New title unlocked: " .. c.name .. "!")
+			end
+		end
+	end
+end
+
 local function syncStats(player: Player, p: Profile)
+	grantTitles(player, p)
 	local ls = player:FindFirstChild("leaderstats")
 	if not ls then
 		ls = Instance.new("Folder")
@@ -209,6 +224,13 @@ function DataService.submitDistance(player: Player, metres: number, mode: string
 		p.best = metres
 	end
 	syncStats(player, p)
+end
+
+function DataService.checkTitles(player: Player)
+	local p = profiles[player]
+	if p then
+		grantTitles(player, p)
+	end
 end
 
 function DataService.addXp(player: Player, n: number)
