@@ -64,32 +64,85 @@ local function rightOf(h: Vector3): Vector3
 	return h:Cross(Vector3.yAxis)
 end
 
--- dir +1 = right, -1 = left. Instant snap: the character is put on the new corridor's
--- centreline facing the new heading, and the camera is swung by the same 90° around it,
--- so you see the new path on the very next frame.
+-- Corner turns are a short curve, not a snap. The runner follows a quadratic arc:
+-- from where they are, through the corner point on their current line, to the new
+-- corridor's centreline. Duration = arc length / speed (clamped), so fast runs don't
+-- overshoot. The camera swings 90° a bit faster than the runner and leans ~8° into the
+-- turn, so the new path is in view straight away. Steering input is locked meanwhile.
+type Turn = { p0: Vector3, c: Vector3, pe: Vector3, h1: Vector3, dir: number, dur: number, start: number, camA: number }
+local turning: Turn? = nil
+local TURN_ROLL = math.rad(8)
+
+local function easeOutCubic(x: number): number
+	return 1 - (1 - x) ^ 3
+end
+
 local function turnAt(dir: number, junction: BasePart)
 	local c = player.Character
 	local root = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local newHeading = snapQuarter(dir == 1 and rightOf(heading) or -rightOf(heading))
-	heading = newHeading
+	local h0 = heading
+	local h1 = snapQuarter(dir == 1 and rightOf(h0) or -rightOf(h0))
+	heading = h1
 	if not root then
 		return
 	end
-	local centre = Vector3.new(junction.Position.X, root.Position.Y, junction.Position.Z)
-	local along = math.max((root.Position - centre):Dot(newHeading), -2)
-	local newPos = centre + newHeading * along
-	local delta = newPos - root.Position
-	root.CFrame = CFrame.lookAt(newPos, newPos + newHeading)
-	local v = root.AssemblyLinearVelocity
-	root.AssemblyLinearVelocity = newHeading * Vector3.new(v.X, 0, v.Z).Magnitude + Vector3.new(0, v.Y, 0)
+	local p0 = root.Position
+	local centre = Vector3.new(junction.Position.X, p0.Y, junction.Position.Z)
+	-- depth < 0 means we are already past the centre (e.g. hit the dead end): the corner is
+	-- then where we stand, and the lead-out is long enough to keep the curve under 45°.
+	local depth = (centre - p0):Dot(h0)
+	local cornerDepth = math.max(depth, 0)
+	local corner = p0 + h0 * cornerDepth
+	local lead = math.max(cornerDepth, math.abs(depth), 4)
+	local pe = centre + h1 * ((corner - centre):Dot(h1) + lead)
+	local len = (corner - p0).Magnitude + (pe - corner).Magnitude
+	local speed = math.max(player:GetAttribute("RunSpeed") or Config.RunSpeedStart, 10)
+	turning = {
+		p0 = p0,
+		c = corner,
+		pe = pe,
+		h1 = h1,
+		dir = dir,
+		dur = math.clamp(len / speed, 0.18, 0.35),
+		start = os.clock(),
+		camA = 0,
+	}
+end
+
+-- One frame of an active turn. Returns true while the turn is still running.
+local function turnFrame(root: BasePart, hum: Humanoid, speed: number): boolean
+	local tr = turning :: Turn
+	local el = os.clock() - tr.start
+	local u = math.min(el / tr.dur, 1)
+	local e = easeOutCubic(u)
+	local a, b = tr.p0:Lerp(tr.c, e), tr.c:Lerp(tr.pe, e)
+	local pos = a:Lerp(b, e)
+	local tangent = (b - a)
+	tangent = tangent.Magnitude > 1e-3 and tangent.Unit or tr.h1
+	local p = Vector3.new(pos.X, root.Position.Y, pos.Z)
+	root.CFrame = CFrame.lookAt(p, p + tangent)
+	root.AssemblyLinearVelocity = tangent * speed + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+	hum.WalkSpeed = speed
+	hum:Move(tangent, false)
 
 	local cam = workspace.CurrentCamera
 	if cam then
-		local yaw = CFrame.Angles(0, dir == 1 and -math.pi / 2 or math.pi / 2, 0)
-		local pivot = newPos
-		local camPos = pivot + yaw:VectorToWorldSpace(cam.CFrame.Position + delta - pivot)
-		cam.CFrame = CFrame.new(camPos) * (yaw * cam.CFrame.Rotation)
+		local ca = easeOutCubic(math.min(el / (tr.dur * 0.75), 1))
+		local dYaw = (ca - tr.camA) * (math.pi / 2) * (tr.dir == 1 and -1 or 1)
+		tr.camA = ca
+		local pivot = CFrame.new(p)
+		cam.CFrame = pivot * CFrame.Angles(0, dYaw, 0) * pivot:Inverse() * cam.CFrame
+		-- Lean into the turn; the camera module rebuilds its CFrame without roll each frame,
+		-- so this is re-applied per frame and simply stops when the turn ends.
+		if u < 1 then
+			cam.CFrame *= CFrame.Angles(0, 0, -TURN_ROLL * math.sin(math.pi * u) * tr.dir)
+		end
 	end
+	if u >= 1 then
+		turning = nil
+		return false
+	end
+	return true
 end
 
 function Runner.stumble(reason: string)
@@ -143,6 +196,7 @@ local function resetRun()
 	slideUntil, stumbleUntil = 0, 0
 	usedJunctions, hitObstacles, collected = {}, {}, {}
 	headingMismatchSince = 0
+	turning = nil
 end
 
 local function step()
@@ -167,6 +221,15 @@ local function step()
 		return
 	end
 	local t = os.clock()
+
+	if turning then
+		local speed = player:GetAttribute("RunSpeed") or Config.RunSpeedStart
+		if t < stumbleUntil then
+			speed *= Config.StumbleSpeedMul
+		end
+		turnFrame(root, hum, speed)
+		return
+	end
 
 	-- Input
 	-- Keyboard and gamepad are read directly (the control module's move vector stayed zero
