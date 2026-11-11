@@ -1,0 +1,73 @@
+{
+  "name": "JungleJuice",
+  "servePort": 34873,
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Shared": { "$path": "src/shared" }
+    },
+    "ServerScriptService": {
+      "Server": { "$path": "src/server" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      },
+      "$properties": {
+        "CharacterJumpHeight": 7.2,
+        "CharacterUseJumpPower": false
+      }
+    },
+    "Workspace": {
+      "$properties": {
+        "StreamingEnabled": false,
+        "Gravity": 196.2
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "Technology": "ShadowMap",
+        "Brightness": 3,
+        "ClockTime": 13.6,
+        "GeographicLatitude": 25,
+        "Ambient": [0.36, 0.45, 0.35],
+        "OutdoorAmbient": [0.62, 0.74, 0.58],
+        "ColorShift_Top": [1.0, 0.95, 0.75],
+        "ColorShift_Bottom": [0.30, 0.45, 0.30],
+        "EnvironmentDiffuseScale": 1,
+        "EnvironmentSpecularScale": 0.5,
+        "GlobalShadows": true,
+        "ShadowSoftness": 0.35,
+        "ExposureCompensation": 0
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.34,
+          "Offset": 0.12,
+          "Color": [0.78, 0.91, 0.79],
+          "Decay": [0.37, 0.60, 0.43],
+          "Glare": 0.35,
+          "Haze": 1.7
+        }
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": { "Intensity": 0.6, "Size": 30, "Threshold": 1.6 }
+      },
+      "Grade": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Saturation": 0.25,
+          "Contrast": 0.08,
+          "Brightness": 0.02,
+          "TintColor": [1.0, 0.98, 0.92]
+        }
+      },
+      "GodRays": {
+        "$className": "SunRaysEffect",
+        "$properties": { "Intensity": 0.09, "Spread": 0.6 }
+      }
+    }
+  }
+}
