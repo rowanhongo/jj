@@ -64,16 +64,32 @@ local function rightOf(h: Vector3): Vector3
 	return h:Cross(Vector3.yAxis)
 end
 
-local pendingTurn: { junction: BasePart, dir: number }? = nil
-local assistCentre: Vector3? = nil
-local assistUntil = 0
-
--- dir +1 = right, -1 = left. After turning, steer toward the new corridor's centreline
--- for a moment (Temple Run style) so the runner never scrapes the exit's walls.
+-- dir +1 = right, -1 = left. Instant snap: the character is put on the new corridor's
+-- centreline facing the new heading, and the camera is swung by the same 90° around it,
+-- so you see the new path on the very next frame.
 local function turnAt(dir: number, junction: BasePart)
-	heading = snapQuarter(dir == 1 and rightOf(heading) or -rightOf(heading))
-	assistCentre = junction.Position
-	assistUntil = os.clock() + 0.6
+	local c = player.Character
+	local root = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local newHeading = snapQuarter(dir == 1 and rightOf(heading) or -rightOf(heading))
+	heading = newHeading
+	if not root then
+		return
+	end
+	local centre = Vector3.new(junction.Position.X, root.Position.Y, junction.Position.Z)
+	local along = math.max((root.Position - centre):Dot(newHeading), -2)
+	local newPos = centre + newHeading * along
+	local delta = newPos - root.Position
+	root.CFrame = CFrame.lookAt(newPos, newPos + newHeading)
+	local v = root.AssemblyLinearVelocity
+	root.AssemblyLinearVelocity = newHeading * Vector3.new(v.X, 0, v.Z).Magnitude + Vector3.new(0, v.Y, 0)
+
+	local cam = workspace.CurrentCamera
+	if cam then
+		local yaw = CFrame.Angles(0, dir == 1 and -math.pi / 2 or math.pi / 2, 0)
+		local pivot = newPos
+		local camPos = pivot + yaw:VectorToWorldSpace(cam.CFrame.Position + delta - pivot)
+		cam.CFrame = CFrame.new(camPos) * (yaw * cam.CFrame.Rotation)
+	end
 end
 
 function Runner.stumble(reason: string)
@@ -127,7 +143,6 @@ local function resetRun()
 	slideUntil, stumbleUntil = 0, 0
 	usedJunctions, hitObstacles, collected = {}, {}, {}
 	headingMismatchSince = 0
-	pendingTurn, assistCentre, assistUntil = nil, nil, 0
 end
 
 local function step()
@@ -210,18 +225,14 @@ local function step()
 			if CollectionService:HasTag(part, "Junction") then
 				local dir = part:GetAttribute("Turn") :: number
 				if not usedJunctions[part] and lastSteerSign == dir and t - lastSteerTime < 0.35 then
-					-- Queue it: the turn happens once we reach the corner's centre, so we
-					-- never cut the corner into the wall ends.
 					usedJunctions[part] = true
-					pendingTurn = { junction = part :: BasePart, dir = dir }
+					turnAt(dir, part :: BasePart)
 				end
 			elseif CollectionService:HasTag(part, "TurnWall") then
-				local j = part.Parent and part.Parent:FindFirstChild("Junction") :: BasePart?
-				if j and pendingTurn and pendingTurn.junction == j then
-					-- Turn was queued, just execute it now.
-					turnAt(pendingTurn.dir, j)
-					pendingTurn = nil
-				elseif j and not usedJunctions[j] then
+				-- TurnWall lives in the piece's Solid folder; the Junction is on the piece model.
+				local model = part:FindFirstAncestorOfClass("Model")
+				local j = model and model:FindFirstChild("Junction") :: BasePart?
+				if j and not usedJunctions[j] then
 					-- Missed the corner: forced turn, stumble.
 					usedJunctions[j] = true
 					turnAt(part:GetAttribute("Turn") :: number, j)
@@ -267,7 +278,7 @@ local function step()
 		local hit = workspace:Raycast(root.Position, Vector3.new(0, -12, 0), rp)
 		local floorHeading = hit and hit.Instance:GetAttribute("Heading") :: Vector3?
 		local onCorner = hit and hit.Instance:GetAttribute("Corner")
-		if onCorner or pendingTurn or t < assistUntil then
+		if onCorner then
 			headingMismatchSince = 0
 		elseif floorHeading then
 			local fh = snapQuarter(floorHeading)
@@ -288,25 +299,6 @@ local function step()
 	if (player:GetAttribute("Juice") or 100) <= 0 and t - lastEmptyStumble > Config.EmptyStumbleEvery then
 		lastEmptyStumble = t
 		Runner.stumble("Out of juice")
-	end
-
-	-- Queued turn executes at the corner's centre line.
-	local pt = pendingTurn
-	if pt then
-		if not pt.junction.Parent then
-			pendingTurn = nil
-		elseif (root.Position - pt.junction.Position):Dot(heading) >= -2 then
-			turnAt(pt.dir, pt.junction)
-			pendingTurn = nil
-		end
-	end
-	-- Hold the middle while a turn is queued; after turning, pull to the new centreline.
-	if pendingTurn then
-		local off = (root.Position - pendingTurn.junction.Position):Dot(rightOf(heading))
-		steer = math.clamp(-off / 4, -1, 1)
-	elseif assistCentre and t < assistUntil then
-		local off = (root.Position - assistCentre):Dot(rightOf(heading))
-		steer = math.abs(off) > 0.5 and math.clamp(-off / 4, -1, 1) or 0
 	end
 
 	-- Drive: forward along heading plus sideways steer, forward speed kept constant.
