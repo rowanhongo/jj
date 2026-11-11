@@ -15,6 +15,7 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -22,12 +23,15 @@ local Config = require(Shared.Config)
 local Palette = require(Shared.Palette)
 local PathService = require(script.Parent.PathService)
 local DataService = require(script.Parent.DataService)
+local ShopService = require(script.Parent.ShopService)
+local Items = require(Shared.Items)
 
 local RoundService = {}
 
 local LOBBY_CF = CFrame.new(0, 0, 220)
 
 local remotes: Folder
+local useGadgetEffect: (Player, any, string) -> ()
 local notifyRemote: RemoteEvent
 local dartFx: RemoteEvent
 
@@ -38,6 +42,8 @@ type Run = {
 	collected: { [number]: boolean },
 	camps: number,
 	caughtAt: number?,
+	slots: { string? },
+	honeyUntil: number,
 }
 local runs: { [Player]: Run } = {}
 local paceDist = 0
@@ -182,6 +188,70 @@ local function catch(player: Player, reason: string)
 	end
 end
 
+local function dropTrap(player: Player, width: number, height: number, color: Color3)
+	local root = rootOf(player)
+	local path = workspace:FindFirstChild("Path")
+	if not root or not path then
+		return
+	end
+	local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+	local at = root.Position - look * 10
+	local rp = RaycastParams.new()
+	rp.FilterType = Enum.RaycastFilterType.Include
+	rp.FilterDescendantsInstances = { path }
+	local hit = workspace:Raycast(at + Vector3.new(0, 4, 0), Vector3.new(0, -30, 0), rp)
+	if not hit then
+		return
+	end
+	local trap = Instance.new("Part")
+	trap.Name = "Trap"
+	trap.Anchored = true
+	trap.CanCollide = false
+	trap.Size = Vector3.new(width, height, 1.6)
+	trap.CFrame = CFrame.lookAt(hit.Position, hit.Position + look) * CFrame.new(0, height / 2, 0)
+	trap.Color = color
+	trap.Material = Enum.Material.Grass
+	trap:SetAttribute("Owner", player.UserId)
+	CollectionService:AddTag(trap, "Hurdle")
+	trap.Parent = path
+end
+
+useGadgetEffect = function(player: Player, run: Run, id: string)
+	local t = now()
+	if id == "JuiceFlask" then
+		run.juice = math.min(Config.JuiceMax, run.juice + 35)
+	elseif id == "VineShield" then
+		player:SetAttribute("Shields", (player:GetAttribute("Shields") or 0) + 1)
+	elseif id == "SprintLeaf" then
+		player:SetAttribute("SpeedUntil", t + 4)
+	elseif id == "HoneyJar" then
+		run.honeyUntil = t + 8
+		run.juice = math.min(Config.JuiceMax, run.juice + 10)
+	elseif id == "BananaPeel" then
+		dropTrap(player, 3, 0.6, Palette.JuiceGlow)
+	elseif id == "ThornTrap" then
+		dropTrap(player, Config.PathWidth - 2, 1.4, Palette.CanopyDeep)
+	elseif id == "BaitFruit" then
+		paceDist -= 35
+	elseif id == "GoldenIdol" then
+		paceDist -= 80
+		DataService.addGems(player, 25)
+	elseif id == "WarDrum" then
+		for other, _ in runs do
+			if other ~= player and other:GetAttribute("State") == "Running" then
+				other:SetAttribute("SlowUntil", t + 2)
+				notify(other, player.DisplayName .. " beat the War Drum!")
+			end
+		end
+	elseif id == "GrappleVine" then
+		player:SetAttribute("FlyUntil", t + 1.6)
+		player:SetAttribute("LeapAt", t)
+	elseif id == "SpiritWings" then
+		player:SetAttribute("FlyUntil", t + 5)
+	end
+	print(string.format("[JJ.Round] %s used %s", player.Name, id))
+end
+
 local function setupRemotes()
 	remotes = Instance.new("Folder")
 	remotes.Name = "Remotes"
@@ -200,7 +270,34 @@ local function setupRemotes()
 	local dart = Instance.new("RemoteEvent")
 	dart.Name = "Dart"
 	dart.Parent = remotes
+	local queue = Instance.new("RemoteEvent")
+	queue.Name = "Queue"
+	queue.Parent = remotes
+	local useGadget = Instance.new("RemoteEvent")
+	useGadget.Name = "UseGadget"
+	useGadget.Parent = remotes
+	ShopService.init(remotes)
 	remotes.Parent = ReplicatedStorage
+
+	queue.OnServerEvent:Connect(function(player, on)
+		if player:GetAttribute("State") == "Lobby" then
+			player:SetAttribute("Queued", on == true)
+		end
+	end)
+
+	useGadget.OnServerEvent:Connect(function(player, slot)
+		local run = runs[player]
+		if type(slot) ~= "number" or not run or player:GetAttribute("State") ~= "Running" then
+			return
+		end
+		local id = run.slots[slot]
+		if not id then
+			return
+		end
+		run.slots[slot] = nil
+		player:SetAttribute("Gadget" .. slot, nil)
+		useGadgetEffect(player, run, id)
+	end)
 
 	collect.OnServerEvent:Connect(function(player, id)
 		local run = runs[player]
@@ -213,7 +310,19 @@ local function setupRemotes()
 			return
 		end
 		run.collected[id] = true
-		if bottle:GetAttribute("Kind") == "Gem" then
+		local kind = bottle:GetAttribute("Kind")
+		if kind == "Box" then
+			local p = DataService.get(player)
+			local pool = p and p.loadout or Items.DefaultGadgets
+			for i = 1, Items.SlotCount do
+				if not run.slots[i] then
+					local g = pool[math.random(1, #pool)]
+					run.slots[i] = g
+					player:SetAttribute("Gadget" .. i, g)
+					break
+				end
+			end
+		elseif kind == "Gem" then
 			DataService.addGems(player, Config.GemPickup)
 		else
 			run.juice = math.min(Config.JuiceMax, run.juice + Config.BottleJuice)
@@ -257,6 +366,12 @@ local function resetPlayer(player: Player)
 	player:SetAttribute("Distance", 0)
 	player:SetAttribute("SlowUntil", 0)
 	player:SetAttribute("DartReadyAt", 0)
+	player:SetAttribute("Queued", false)
+	for i = 1, Items.SlotCount do
+		player:SetAttribute("Gadget" .. i, nil)
+	end
+	player:SetAttribute("SpeedUntil", 0)
+	player:SetAttribute("FlyUntil", 0)
 	if player:GetAttribute("Shields") == nil then
 		player:SetAttribute("Shields", 0)
 	end
@@ -274,7 +389,7 @@ local function playRound()
 	runs = {}
 	local list = {}
 	for _, player in Players:GetPlayers() do
-		if rootOf(player) then
+		if rootOf(player) and player:GetAttribute("Queued") then
 			table.insert(list, player)
 		end
 	end
@@ -290,7 +405,7 @@ local function playRound()
 	local startCF = PathService.startCFrame()
 	for i, player in list do
 		local lateral = (#list == 1) and 0 or (-9 + 18 * (i - 1) / (#list - 1))
-		runs[player] = { dist = -10, juice = Config.JuiceStart, emptySince = 0, collected = {}, camps = 0 }
+		runs[player] = { dist = -10, juice = Config.JuiceStart, emptySince = 0, collected = {}, camps = 0, slots = {}, honeyUntil = 0 }
 		player:SetAttribute("State", "Countdown")
 		player:SetAttribute("RunSpeed", Config.RunSpeedStart)
 		player:SetAttribute("Juice", Config.JuiceStart)
@@ -343,7 +458,8 @@ local function playRound()
 			end
 			local d, seg = PathService.progress(root.Position, run.dist)
 			run.dist = math.max(run.dist, d)
-			if seg and root.Position.Y < PathService.floorY(seg) - Config.FallDepth then
+			local flying = now() < (player:GetAttribute("FlyUntil") or 0) + 1
+			if seg and not flying and root.Position.Y < PathService.floorY(seg) - Config.FallDepth then
 				catch(player, "Fell")
 				continue
 			end
@@ -352,7 +468,9 @@ local function playRound()
 				continue
 			end
 			-- Juice
-			run.juice = math.max(0, run.juice - Config.JuiceDrainPerSecond * dt)
+			if now() >= run.honeyUntil then
+				run.juice = math.max(0, run.juice - Config.JuiceDrainPerSecond * dt)
+			end
 			-- Camps
 			local camp = math.floor(metres(run.dist) / Config.CampEveryMetres)
 			if camp > run.camps then
@@ -408,9 +526,11 @@ local function playRound()
 		if i == 1 and #order > 1 then
 			gems += Config.LastStandingGems
 		end
+		local xp = 20 + math.floor(m / 2)
 		DataService.addGems(e.player, gems)
-		DataService.submitDistance(e.player, m)
-		notify(e.player, string.format("#%d  %d m  +%d gems", i, m, gems))
+		DataService.addXp(e.player, xp)
+		DataService.submitDistance(e.player, m, "Stampede")
+		notify(e.player, string.format("#%d  %d m  +%d gems  +%d XP", i, m, gems, xp))
 		task.spawn(DataService.save, e.player)
 	end
 	local top = order[1]
@@ -454,11 +574,23 @@ function RoundService.init()
 
 	task.spawn(function()
 		while true do
-			while #Players:GetPlayers() < Config.MinPlayers do
-				status("Waiting for players...")
-				task.wait(1)
+			workspace:SetAttribute("Mode", "Stampede")
+			local startAt = now() + Config.IntermissionSeconds
+			workspace:SetAttribute("NextRunAt", startAt)
+			status("")
+			while now() < startAt do
+				task.wait(0.25)
 			end
-			waitWithStatus(Config.IntermissionSeconds, "Next run in %d")
+			local anyQueued = false
+			for _, pl in Players:GetPlayers() do
+				if pl:GetAttribute("Queued") then
+					anyQueued = true
+				end
+			end
+			if not anyQueued then
+				continue
+			end
+			workspace:SetAttribute("NextRunAt", 0)
 			local ok, err = pcall(playRound)
 			if not ok then
 				warn("[JJ.Round] round crashed:", err)

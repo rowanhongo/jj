@@ -35,6 +35,15 @@ Code source of truth: `src/shared/Palette.luau`. Use only these colours for worl
 | UiText | `#FFF6DC` | GUI text |
 | UiDanger | `#E2483D` | Guardian warnings |
 | UiGood | `#8CC63F` | positive feedback |
+| UiPaper | `#F6EFD9` | shop / inventory card face |
+| UiPaperDim | `#E6DDC2` | card wells, locked items |
+| UiInk | `#1E2A1C` | text on paper, tab bar |
+| UiBuy | `#3FD08A` | buy and PLAY buttons |
+| Common | `#B9C2A3` | rarity |
+| Uncommon | `#8CC63F` | rarity |
+| Rare | `#5CB8FF` | rarity |
+| Epic | `#B07CFF` | rarity |
+| Mythic | `#FF5C7A` | rarity |
 
 ## Lighting (default.project.json)
 - Midday sun: ClockTime 13.6, Brightness 3, warm `ColorShift_Top`.

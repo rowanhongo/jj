@@ -49,6 +49,8 @@ local lastSteerTime = 0
 local headingMismatchSince = 0
 local baseHip: number? = nil
 local wasRunning = false
+local lastLeap = 0
+local flyY: number? = nil
 
 local params = OverlapParams.new()
 params.FilterType = Enum.RaycastFilterType.Include
@@ -269,6 +271,29 @@ local function step()
 	if workspace:GetServerTimeNow() < (player:GetAttribute("SlowUntil") or 0) then
 		speed *= Config.DartSlowMul
 	end
+	local st = workspace:GetServerTimeNow()
+	if st < (player:GetAttribute("SpeedUntil") or 0) then
+		speed *= 1.35
+	end
+
+	-- Gadgets: Grapple Vine launches you forward; while flying you never drop below where you took off.
+	local leapAt = player:GetAttribute("LeapAt") or 0
+	if leapAt ~= lastLeap then
+		lastLeap = leapAt
+		if st - leapAt < 1 then
+			flyY = root.Position.Y + 6
+			root.AssemblyLinearVelocity = heading * 95 + Vector3.new(0, 45, 0)
+		end
+	end
+	if st < (player:GetAttribute("FlyUntil") or 0) then
+		flyY = flyY or root.Position.Y
+		if root.Position.Y < flyY then
+			local v = root.AssemblyLinearVelocity
+			root.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, (flyY - root.Position.Y) * 10), v.Z)
+		end
+	else
+		flyY = nil
+	end
 
 	-- Slide pose (greybox: drop the hip so the body ducks under logs)
 	local sliding = t < slideUntil
@@ -302,7 +327,7 @@ local function step()
 					Runner.stumble("Missed the turn")
 				end
 			elseif CollectionService:HasTag(part, "Hurdle") then
-				if not hitObstacles[part] then
+				if not hitObstacles[part] and part:GetAttribute("Owner") ~= player.UserId then
 					hitObstacles[part] = true
 					Runner.stumble("Tripped")
 				end

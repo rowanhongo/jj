@@ -8,12 +8,16 @@ local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Hud = require(script.Hud)
 local Runner = require(script.Runner)
 local Darts = require(script.Darts)
+local Lobby = require(script.Lobby)
+local Nametags = require(script.Nametags)
 
 local player = Players.LocalPlayer
 
 Hud.init()
 Runner.init()
 Darts.init()
+Lobby.init(function(t) Hud.toast(t) end)
+Nametags.init()
 
 Runner.onStumble.Event:Connect(function(reason: string)
 	Hud.flash(string.upper(reason) .. "!", Palette.UiDanger)
@@ -24,6 +28,8 @@ end)
 Runner.onPickup.Event:Connect(function(kind: string)
 	if kind == "Gem" then
 		Hud.flash("+3 GEMS", Palette.Gem)
+	elseif kind == "Box" then
+		Hud.flash("GADGET!", Palette.UiGold)
 	end
 end)
 remotes.Notify.OnClientEvent:Connect(function(text: string)

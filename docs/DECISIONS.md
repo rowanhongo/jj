@@ -32,3 +32,11 @@ Endless forward runner for up to 8 players. The character runs forward on its ow
   - Every 14th check-in: one class of your choice, which replaces the gems that day.
 - **Planned consumables:** revive, bait (stalls the Guardian), shields, juice rush.
 - Cosmetics come last.
+
+## D5: Lobby, shop, gadgets (modelled on the user's reference screenshots)
+- **Lobby UI:** level/XP and gems top right; mode and next-run countdown top centre; PLAY joins the next run (press again to leave); bottom bar Shop [Z], Inventory [X], Modes [C]. During a run the screen is clear apart from the run HUD and two gadget slots [Q] [E].
+- **Gadgets:** 11 in `src/shared/Items.luau`, Common to Mythic. 3 are owned by default; the rest come from Item Rolls (100 gems, or 10 for 650). Pity: Rare every 10, Epic 25, Mythic 80. Duplicates count toward mastery.
+- **In a run:** gold ? boxes on about 16% of pieces give a random gadget from your loadout (up to 3) into one of 2 slots.
+- **Daily Shop:** 4 cosmetics (titles, emotes, trails) for gems, the same for everyone, changing each UTC day. Gem packs are listed with Robux prices; product ids are 0 until created. Passes are shown as "Soon".
+- **Overhead tag:** your title plus the chosen mode's icon and best metres (Inventory > Records picks the mode).
+- **XP:** 20 + metres/2 per run. Level L needs 150 + 150L XP.

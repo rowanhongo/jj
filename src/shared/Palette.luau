@@ -49,4 +49,15 @@ return table.freeze({
 	UiText = hex("FFF6DC"),
 	UiDanger = hex("E2483D"),
 	UiGood = hex("8CC63F"),
+	UiPaper = hex("F6EFD9"), -- shop/inventory card face
+	UiPaperDim = hex("E6DDC2"), -- card wells, locked items
+	UiInk = hex("1E2A1C"), -- text on paper, tab bar
+	UiBuy = hex("3FD08A"), -- buy / play buttons
+
+	-- Rarity
+	Common = hex("B9C2A3"),
+	Uncommon = hex("8CC63F"),
+	Rare = hex("5CB8FF"),
+	Epic = hex("B07CFF"),
+	Mythic = hex("FF5C7A"),
 })

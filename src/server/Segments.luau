@@ -187,6 +187,28 @@ local function pickup(ctx: Ctx, cf: CFrame, kind: string): Part
 		core.CanCollide = false
 		core.CanQuery = false
 		core.CanTouch = false
+	elseif kind == "Box" then
+		-- ? box: a gold crate with a question mark on every side. Gives a loadout gadget.
+		b = newPart(ctx.model, cf * CFrame.Angles(0, math.rad(20), 0), Vector3.new(2.6, 2.6, 2.6), Palette.UiGold, Enum.Material.SmoothPlastic)
+		for _, face in Enum.NormalId:GetEnumItems() do
+			local sg = Instance.new("SurfaceGui")
+			sg.Face = face
+			sg.PixelsPerStud = 40
+			sg.LightInfluence = 0
+			local t = Instance.new("TextLabel")
+			t.Size = UDim2.fromScale(1, 1)
+			t.BackgroundTransparency = 1
+			t.Text = "?"
+			t.Font = Enum.Font.FredokaOne
+			t.TextScaled = true
+			t.TextColor3 = Palette.UiText
+			local st = Instance.new("UIStroke")
+			st.Color = Palette.UiRim
+			st.Thickness = 4
+			st.Parent = t
+			t.Parent = sg
+			sg.Parent = b
+		end
 	else
 		b = newPart(ctx.model, cf * CFrame.Angles(0, 0, math.pi / 2), Vector3.new(2.2, 1.6, 1.6), Palette.Juice, Enum.Material.Neon)
 		b.Shape = Enum.PartType.Cylinder
@@ -212,6 +234,9 @@ local function bottles(ctx: Ctx, z0: number, z1: number, y: number?, lift: numbe
 		for i = -1, 1 do
 			pickup(ctx, L(ctx, lane, h, mid + i * 5), "Juice")
 		end
+	end
+	if not force and rng:NextNumber() < 0.16 then
+		pickup(ctx, L(ctx, rng:NextNumber(-6, 6), (y or 0) + 2.4, rng:NextNumber(z0, z1)), "Box")
 	end
 	if rng:NextNumber() < 0.3 then
 		local side = rng:NextNumber() < 0.5 and -1 or 1
