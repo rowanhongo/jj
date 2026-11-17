@@ -75,7 +75,11 @@ local function drawDart(from: Player, to: Player)
 	dart.Material = Enum.Material.Neon
 	dart.CFrame = CFrame.lookAt(a.Position + Vector3.new(0, 1.5, 0), b.Position)
 	dart.Parent = workspace
-	local tw = TweenService:Create(dart, TweenInfo.new(0.18, Enum.EasingStyle.Linear), { CFrame = CFrame.lookAt(b.Position, b.Position + (b.Position - a.Position)) })
+	local tw = TweenService:Create(
+		dart,
+		TweenInfo.new(0.18, Enum.EasingStyle.Linear),
+		{ CFrame = CFrame.lookAt(b.Position, b.Position + (b.Position - a.Position)) }
+	)
 	tw:Play()
 	tw.Completed:Connect(function()
 		dart:Destroy()
@@ -88,9 +92,7 @@ function Darts.init()
 			fire()
 		end
 		return Enum.ContextActionResult.Pass
-	end, true, Enum.KeyCode.F, Enum.KeyCode.ButtonX)
-	ContextActionService:SetTitle("JJDart", "Dart")
-	ContextActionService:SetPosition("JJDart", UDim2.new(1, -250, 1, -150))
+	end, false, Enum.KeyCode.F, Enum.KeyCode.ButtonX)
 	remotes.DartFx.OnClientEvent:Connect(drawDart)
 end
 

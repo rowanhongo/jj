@@ -15,6 +15,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared.Items)
+local SettingsDefs = require(Shared.SettingsDefs)
+local Guard = require(script.Parent.Guard)
 local Palette = require(Shared.Palette)
 local DataService = require(script.Parent.DataService)
 
@@ -99,12 +101,19 @@ handlers.Roll = function(player, p, n)
 	for _ = 1, count do
 		table.insert(out, rollOne(p))
 	end
+	DataService.logGems(
+		player,
+		true,
+		price,
+		Enum.AnalyticsEconomyTransactionType.Shop.Name,
+		count == 10 and "Roll10" or "Roll1"
+	)
 	DataService.checkTitles(player)
 	print(string.format("[JJ.Shop] %s rolled %d: %s", player.Name, count, table.concat(out, ",")))
 	return out
 end
 
-handlers.BuyDaily = function(_, p, id)
+handlers.BuyDaily = function(player, p, id)
 	local today = ShopService.daily()
 	local c = Items.get(id)
 	if not c or not table.find(today, id) or p.cosmetics[id] or p.gems < c.price then
@@ -112,6 +121,7 @@ handlers.BuyDaily = function(_, p, id)
 	end
 	p.gems -= c.price
 	p.cosmetics[id] = true
+	DataService.logGems(player, true, c.price, Enum.AnalyticsEconomyTransactionType.Shop.Name, id)
 	return true
 end
 
@@ -128,6 +138,15 @@ handlers.Equip = function(_, p, kind, id)
 		return nil
 	end
 	p.equipped[kind] = id
+	return true
+end
+
+handlers.Setting = function(_, p, id, v)
+	if not SettingsDefs.valid(id, v) then
+		return nil
+	end
+	p.settings = p.settings or {}
+	p.settings[id] = v
 	return true
 end
 
@@ -198,10 +217,31 @@ local function applyTrail(player: Player)
 	t.Parent = root
 end
 
+-- Gifting: the player picks someone in the server, then buys a pack; the receipt credits them.
+local giftTargets: { [Player]: number } = {}
+handlers.GiftTarget = function(player: Player, _p: any, userId: any)
+	if type(userId) ~= "number" then
+		return nil
+	end
+	-- anyone on Roblox (the lobby search looks the name up); never yourself
+	if userId <= 0 or userId ~= math.floor(userId) or userId == player.UserId then
+		return nil
+	end
+	giftTargets[player] = userId
+	return true
+end
+function ShopService.giftTargetOf(player: Player): number?
+	return giftTargets[player]
+end
+game:GetService("Players").PlayerRemoving:Connect(function(p)
+	giftTargets[p] = nil
+end)
+
 function ShopService.init(remotes: Folder)
 	local profileEv = Instance.new("RemoteEvent")
 	profileEv.Name = "Profile"
 	profileEv.Parent = remotes
+	Guard.trap(profileEv) -- server-to-client only
 	local call = Instance.new("RemoteFunction")
 	call.Name = "ShopCall"
 	call.Parent = remotes
@@ -211,6 +251,9 @@ function ShopService.init(remotes: Folder)
 	end)
 
 	call.OnServerInvoke = function(player, action, ...)
+		if not Guard.allow(player, "ShopCall") then
+			return false, nil
+		end
 		local p = DataService.get(player)
 		local h = type(action) == "string" and handlers[action]
 		if not p or not h then

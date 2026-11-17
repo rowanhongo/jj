@@ -1,5 +1,5 @@
 --!strict
--- Small tag above every player's head: their title, then the showcased mode's icon and best metres.
+-- Small tag above every player's head: their title, then their best metres.
 -- Reads replicated attributes (Title, Showcase, ShowcaseBest). Hidden while you are running.
 
 local Players = game:GetService("Players")
@@ -8,21 +8,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Palette = require(Shared.Palette)
-local Items = require(Shared.Items)
 
 local me = Players.LocalPlayer
+local Settings = require(script.Parent.Settings)
+
 local Nametags = {}
 
 local tags: { [Player]: BillboardGui } = {}
-
-local function icon(mode: string): string
-	for _, m in Items.Modes do
-		if m.id == mode then
-			return m.icon
-		end
-	end
-	return "🏃"
-end
 
 local function build(p: Player): BillboardGui
 	local bb = Instance.new("BillboardGui")
@@ -80,10 +72,10 @@ function Nametags.init()
 			local head = p.Character and p.Character:FindFirstChild("Head")
 			bb.Adornee = head
 			bb.Enabled = head ~= nil and not hideAll
-			local t = p:GetAttribute("Title") or "";
+			local t = p:GetAttribute("Title") or ""
 			(bb :: any).Title.Text = t
-			local b = p:GetAttribute("ShowcaseBest") or 0;
-			(bb :: any).Best.Text = string.format("%s %s m", icon(p:GetAttribute("Showcase") or "Stampede"), b > 0 and tostring(b) or "—")
+			local b = p:GetAttribute("ShowcaseBest") or 0
+			(bb :: any).Best.Text = string.format("%s m", b > 0 and tostring(b) or "—")
 		end
 	end)
 end
